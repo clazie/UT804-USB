@@ -3,7 +3,7 @@ import time
 # import struct
 
 # Logging constants
-DEBUG = True
+DEBUG = False
 INFO = True
 
 # Color constants
