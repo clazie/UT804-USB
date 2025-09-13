@@ -18,20 +18,22 @@ ENDC = '\033[0m'
 CUPPLING = [
     'DC',
     'AC',
+    '--',
     'AC+DC'
 ]
 
 MEASUREMENT = [
+    '  ',
     'V=',
     'V~',
     'mV=',
     'Ohm',
-    'F',
+    'µF',
     '°C',
     'µA',
     'mA',
     'A',
-    'Pieps',
+    'Beep',
     'Diode',
     'Hz (oder Tastverhältnis)',
     '°F',
@@ -58,9 +60,10 @@ receivebytes: bytes = []
 lastrecbytes: bytes = []
 
 
+# Logging functions
 def Log(msg: str):
   if (DEBUG or INFO):
-    print(f'{OKCYAN}{msg}{ENDC}')
+    print(f'{OKGREEN}{msg}{ENDC}')
 
 
 def Info(msg: str):
@@ -81,71 +84,97 @@ def Error(msg: str):
   print(f'{FAIL}{msg}{ENDC}')
 
 
+# USB-Hid functions
 def listAllHidDevices():
-    print('--------------------------------')
-    print('Listing all HID devices')
-    print('--------------------------------')
+    Debug('--------------------------------')
+    Debug('Listing all HID devices')
+    Debug('--------------------------------')
 
     all_hids = hid.find_all_hid_devices()
     for d in all_hids:
-        print(d)
+        Debug(d)
+
+
+def writeBuffer(report, buffer):
+    Debug(buffer)
+    report.set_raw_data(buffer)
+    ret = report.send()
+    time.sleep(0.1)
+    return int(ret)
+
+# def readBuffer(report, buffer):
+#     Debug(buffer)
+#     report.set_raw_data(buffer)
+#     ret = report.send()
+#     time.sleep(0.1)
+#     return int(ret)
+
+
+def writeData(report, data):
+    buffer = [0x00] * 9  # 9 bytes buffer
+    buffer[0] = 0  # report ID
+    buffer[1] = 9  # Data Length
+    buffer[1:7] = data[0:6]  # Data
+    buffer[7] = 0  # checksum
+    buffer[8] = 0
+    return int(writeBuffer(report, buffer))
 
 
 def getFirstHidDevicesByVendorProduct(vendor_id, product_id):
-    print('--------------------------------')
-    print(f'Listing all HID devices with vendor_id=0x{vendor_id:04x}, product_id=0x{product_id:04x}')
-    print('--------------------------------')
+    Info('--------------------------------')
+    Info(f'Listing all HID devices with vendor_id=0x{vendor_id:04x}, product_id=0x{product_id:04x}')
+    Info('--------------------------------')
 
     filter = hid.HidDeviceFilter(vendor_id=vendor_id, product_id=product_id)
     devices: list = filter.get_devices()
 
     if (len(devices) == 0):
-        print("No device found")
+        Error("No device found")
         return None
 
-    print(f'found {len(devices)} device(s):')
+    Info(f'found {len(devices)} device(s):')
 
     for d in devices:
-        print(d)
+        Info(d)
         return devices[0]
     return None
 
 
 def getOutReport(device):
     out_reports = device.find_output_reports()
-    print(f'Found {len(out_reports)} output report(s)')
+    Debug(f'Found {len(out_reports)} output report(s)')
 
     for i in range(len(out_reports)):
-        print(f"Output report {i}: {out_reports[i]}")
+        Debug(f"Output report {i}: {out_reports[i]}")
 
     if (len(out_reports) == 1):
-        print("Using the first output report")
+        Debug("Using the first output report")
         return out_reports[0]
     return None
 
 
 def getInReport(device):
-    in_reports = device.find_output_reports()
-    print(f'Found {len(in_reports)} output report(s)')
+    in_reports = device.find_input_reports()
+    Debug(f'Found {len(in_reports)} input report(s)')
 
     for i in range(len(in_reports)):
-        print(f"Output report {i}: {in_reports[i]}")
+       Debug(f"Input report {i}: {in_reports[i]}")
 
     if (len(in_reports) == 1):
-        print("Using the first output report")
+        Debug("Using the first input report")
         return in_reports[0]
     return None
 
 
 def getFeatureReport(device):
     feature_reports = device.find_feature_reports()
-    print(f'Found {len(feature_reports)} feature report(s)')
+    Debug(f'Found {len(feature_reports)} feature report(s)')
 
     for i in range(len(feature_reports)):
-        print(f"Feature report {i}: {feature_reports[i]}")
+        Debug(f"Feature report {i}: {feature_reports[i]}")
 
     if (len(feature_reports) == 1):
-        print("Using the first feature report")
+        Debug("Using the first feature report")
         return feature_reports[0]
     return None
 
@@ -155,25 +184,26 @@ def readDataHandler(data):
     global lastrecbytes
 
     datacount = data[1] & 0x07
-    # print(datacount)
+    Debug(f'Datacount: {datacount}')
     if (datacount > 0):  # data not empty
-      Log(f"Raw data: {data}")
+      Debug(f"Raw data: {data}")
       for i in range(datacount):
         receivebytes.append(data[i + 2] & 0x7F)
-        print(f"Data[{i}] = {data[i + 2]} ({chr(data[i + 2])})")
+        Debug(f"Data[{i}] = {data[i + 2]} ({chr(data[i + 2])})")
 
     length = len(receivebytes)
-    # print(f'len(receivebytes)={length}')
+    Debug(f'len(receivebytes)={length}')
 
     if ((length > 0) and (receivebytes[length - 1] == 10)):  # end of string (\n)
-      print(f'{receivebytes} done')
+      Debug(f'{receivebytes} done')
       lastrecbytes = bytes(receivebytes)
       receivebytes = []
 
     return None
 
 
-def calcValue(valuestr: str, factor: int, info: int, corr: int = 0) -> float:
+# Value functions
+def calcValue(valuestr: str, factor: int, info: int, measurementidx: int) -> float:
   try:
     # if (len(s) < 8):
     #   raise ValueError('Not a valid value')
@@ -181,6 +211,46 @@ def calcValue(valuestr: str, factor: int, info: int, corr: int = 0) -> float:
     # factor = int(s[5:6].decode('ascii'))
     # valstr: str = s[0:5].decode('ascii')
 
+    # correction factor
+    corr = 0
+    match measurementidx:
+       case 0:
+          corr = 0
+       case 1:  # V=
+          corr = 0
+       case 2:  # V~
+          corr = 0
+       case 3:  # mV=
+          corr = 3
+       case 4:  # Ohm
+          corr = 2
+       case 5:  # Cap
+          corr = -2
+       case 6:  # °C
+          corr = 4
+       case 7:  # µA
+          corr = 3
+       case 8:  # mA
+          corr = 2
+       case 9:  # A
+          corr = 1
+       case 10:  # Beep
+          corr = 3
+       case 11:  # Diode
+          corr = 1
+       case 12:  # Hz (oder Tastverhältnis)
+          if (info[5] == '-'):
+             corr = 3
+          else:
+             corr = 2
+       case 13:  # °F
+          corr = 4
+       case 14:  # -
+          corr = 0
+       case 15:  # % (4-20-mA-Tester)
+          corr = 3
+
+    # overload detection
     if (valuestr == '::0<:'):
       raise ValueError('Overload')
 
@@ -188,7 +258,7 @@ def calcValue(valuestr: str, factor: int, info: int, corr: int = 0) -> float:
     value = float(valint / 100000 * (10 ** (factor + corr)))
     value = round(value, 5)
 
-    if ((info[5] == '-')):  # Negative sign
+    if ((measurementidx != 12) and (info[5] == '-')):  # Negative sign
       value = -value
 
   except ValueError as e:
@@ -213,7 +283,8 @@ def decodeStr(b: bytes):
     Debug(f'Factor: {factor}')
 
     # 6 Schalter
-    measurement: str = MEASUREMENT[int(b[6] - 48)]
+    measurementindex = int(b[6] - 48)
+    measurement: str = MEASUREMENT[measurementindex]
     Debug(f'MEASUREMENT: {measurement}')
 
     # 7 Kopplung
@@ -225,88 +296,50 @@ def decodeStr(b: bytes):
     Debug(f'Info: {info}')
 
     # Wert mit Faktor
-    value: float = float(calcValue(valuestr, factor, info))
+    value: float = float(calcValue(valuestr, factor, info, measurementindex))
     Debug(f'Value: {value}')
 
-    Info(f'{cuppling}{measurement} {value} Faktor: {factor}, Info: {info}')
+    Log(f'{cuppling}{measurement} {value} Faktor: {factor}, Info: {info}')
 
 
-def writeBuffer(report, buffer):
-    print(buffer)
-    report.set_raw_data(buffer)
-    ret = report.send()
-    time.sleep(0.1)
-    return int(ret)
-
-
-def writeData(report, data):
-    buffer = [0x00] * 9  # 9 bytes buffer
-    buffer[0] = 0  # report ID
-    buffer[1] = 9  # Data Length
-    buffer[1:7] = data[0:6]  # Data
-    buffer[7] = 0  # checksum
-    buffer[8] = 0
-    return int(writeBuffer(report, buffer))
-
-
+# main program
 listAllHidDevices()
 device: hid.HidDevice = getFirstHidDevicesByVendorProduct(0x1a86, 0xe008)
 if (device is None):
-    print("No device to open")
+    Error("No device to open")
     exit(1)
 
 device.open()
 device.set_raw_data_handler(readDataHandler)
 out_report = getOutReport(device)
-in_report = getInReport(device)
+# in_report = getInReport(device)
 
-print(writeData(in_report, b'data?;'))
+Debug(writeData(out_report, b'data?;'))
 
 # Turn on Serial communication
 feature_report = getFeatureReport(device)
 # baudrate 60 09 -> 0x0960 = 2400
 # baudrate C0 12 -> 0x12C0 = 4800
 # baudrate 80 25 -> 0x2580 = 9600
-#                                  0     baud     2     3     4     5
-print(writeBuffer(feature_report, [0x00, 0x4b, 0x00, 0x00, 0x03, 0x00]))
-# print(writeBuffer(feature_report, [0x00, 0x60, 0x09, 0x00, 0x00, 0x03]))
+# Not working????
+Debug(writeBuffer(feature_report, [0x00, 0x4b, 0x00, 0x00, 0x03, 0x00]))
 
-
+Warn('Press Ctrl+C to terminate program')
 try:
-    print("Device is open")
+    Log("Device is open")
     while (device.is_plugged()):
-        # print(writeData(out_report, b'disp?;'))
-        # time.sleep(1)
-        if(len(lastrecbytes) > 0):
-          if (len(lastrecbytes) == 11):
-            decodeStr(lastrecbytes)
-          else:
-            print(f'Error: Stringlength is wrong: {len(lastrecbytes)})')
-          lastrecbytes = []
-
-        # print(writeData(out_report, b'data?;'))
-        # time.sleep(1)
-        # print(f'Received data string: {lastrecstr}')
-        # lastrecstr = ''
-
-        # print(writeData(in_report, b'data?;'))
-        # time.sleep(1)
-        # print(writeData(feature_report, b'data?;'))
-        # time.sleep(1)
-        # print(writeData(out_report, b'disp?;'))
-        # time.sleep(1)
-        # print(writeData(in_report, b'disp?;'))
-        # time.sleep(1)
-        # print(writeData(feature_report, b'disp?;'))
-        # time.sleep(1)
-
-
+      if(len(lastrecbytes) > 0):
+        if (len(lastrecbytes) == 11):
+          decodeStr(lastrecbytes)
+        else:
+          Warn(f'Error: Stringlength is wrong: {len(lastrecbytes)})')
+        lastrecbytes = []
 except KeyboardInterrupt as e:
-    print("KeyboardInterrupt")
-    print(e)
+    Warn("KeyboardInterrupt")
+    Warn(e)
 finally:
-    print("Finally")
+    Log("Finally")
     device.close()
-    print("Device is closed")
+    Log("Device is closed")
 
 exit(0)
