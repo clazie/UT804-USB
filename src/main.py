@@ -2,17 +2,8 @@ import pywinusb.hid as hid
 import time
 # import struct
 
-# Logging constants
-DEBUG = False
-INFO = True
+from simple_logger.logging import Log
 
-# Color constants
-OKGRAY = '\033[0;90m'
-OKCYAN = '\033[96m'
-OKGREEN = '\033[92m'
-WARNING = '\033[93m'
-FAIL = '\033[91m'
-ENDC = '\033[0m'
 
 # Decodings
 CUPPLING = [
@@ -60,50 +51,26 @@ receivebytes: bytes = []
 lastrecbytes: bytes = []
 
 
-# Logging functions
-def Log(msg: str):
-  if (DEBUG or INFO):
-    print(f'{OKGREEN}{msg}{ENDC}')
-
-
-def Info(msg: str):
-  if (INFO):
-    print(f'{OKCYAN}{msg}{ENDC}')
-
-
-def Debug(msg: str):
-  if (DEBUG):
-    print(f'{OKGRAY}{msg}{ENDC}')
-
-
-def Warn(msg: str):
-  print(f'{WARNING}{msg}{ENDC}')
-
-
-def Error(msg: str):
-  print(f'{FAIL}{msg}{ENDC}')
-
-
 # USB-Hid functions
 def listAllHidDevices():
-    Debug('--------------------------------')
-    Debug('Listing all HID devices')
-    Debug('--------------------------------')
+    Log.Debug('--------------------------------')
+    Log.Debug('Listing all HID devices')
+    Log.Debug('--------------------------------')
 
     all_hids = hid.find_all_hid_devices()
     for d in all_hids:
-        Debug(d)
+        Log.Debug(d)
 
 
 def writeBuffer(report, buffer):
-    Debug(buffer)
+    Log.Debug(buffer)
     report.set_raw_data(buffer)
     ret = report.send()
     time.sleep(0.1)
     return int(ret)
 
 # def readBuffer(report, buffer):
-#     Debug(buffer)
+#     Log.Debug(buffer)
 #     report.set_raw_data(buffer)
 #     ret = report.send()
 #     time.sleep(0.1)
@@ -121,60 +88,60 @@ def writeData(report, data):
 
 
 def getFirstHidDevicesByVendorProduct(vendor_id, product_id):
-    Info('--------------------------------')
-    Info(f'Listing all HID devices with vendor_id=0x{vendor_id:04x}, product_id=0x{product_id:04x}')
-    Info('--------------------------------')
+    Log.Info('--------------------------------')
+    Log.Info(f'Listing all HID devices with vendor_id=0x{vendor_id:04x}, product_id=0x{product_id:04x}')
+    Log.Info('--------------------------------')
 
     filter = hid.HidDeviceFilter(vendor_id=vendor_id, product_id=product_id)
     devices: list = filter.get_devices()
 
     if (len(devices) == 0):
-        Error("No device found")
+        Log.Error("No device found")
         return None
 
-    Info(f'found {len(devices)} device(s):')
+    Log.Info(f'found {len(devices)} device(s):')
 
     for d in devices:
-        Info(d)
+        Log.Info(d)
         return devices[0]
     return None
 
 
 def getOutReport(device):
     out_reports = device.find_output_reports()
-    Debug(f'Found {len(out_reports)} output report(s)')
+    Log.Debug(f'Found {len(out_reports)} output report(s)')
 
     for i in range(len(out_reports)):
-        Debug(f"Output report {i}: {out_reports[i]}")
+        Log.Debug(f"Output report {i}: {out_reports[i]}")
 
     if (len(out_reports) == 1):
-        Debug("Using the first output report")
+        Log.Debug("Using the first output report")
         return out_reports[0]
     return None
 
 
 def getInReport(device):
     in_reports = device.find_input_reports()
-    Debug(f'Found {len(in_reports)} input report(s)')
+    Log.Debug(f'Found {len(in_reports)} input report(s)')
 
     for i in range(len(in_reports)):
-       Debug(f"Input report {i}: {in_reports[i]}")
+       Log.Debug(f"Input report {i}: {in_reports[i]}")
 
     if (len(in_reports) == 1):
-        Debug("Using the first input report")
+        Log.Debug("Using the first input report")
         return in_reports[0]
     return None
 
 
 def getFeatureReport(device):
     feature_reports = device.find_feature_reports()
-    Debug(f'Found {len(feature_reports)} feature report(s)')
+    Log.Debug(f'Found {len(feature_reports)} feature report(s)')
 
     for i in range(len(feature_reports)):
-        Debug(f"Feature report {i}: {feature_reports[i]}")
+        Log.Debug(f"Feature report {i}: {feature_reports[i]}")
 
     if (len(feature_reports) == 1):
-        Debug("Using the first feature report")
+        Log.Debug("Using the first feature report")
         return feature_reports[0]
     return None
 
@@ -184,18 +151,18 @@ def readDataHandler(data):
     global lastrecbytes
 
     datacount = data[1] & 0x07
-    Debug(f'Datacount: {datacount}')
+    Log.Debug(f'Datacount: {datacount}')
     if (datacount > 0):  # data not empty
-      Debug(f"Raw data: {data}")
+      Log.Debug(f"Raw data: {data}")
       for i in range(datacount):
         receivebytes.append(data[i + 2] & 0x7F)
-        Debug(f"Data[{i}] = {data[i + 2]} ({chr(data[i + 2])})")
+        Log.Debug(f"Data[{i}] = {data[i + 2]} ({chr(data[i + 2])})")
 
     length = len(receivebytes)
-    Debug(f'len(receivebytes)={length}')
+    Log.Debug(f'len(receivebytes)={length}')
 
     if ((length > 0) and (receivebytes[length - 1] == 10)):  # end of string (\n)
-      Debug(f'{receivebytes} done')
+      Log.Debug(f'{receivebytes} done')
       lastrecbytes = bytes(receivebytes)
       receivebytes = []
 
@@ -206,7 +173,7 @@ def readDataHandler(data):
 def calcValue(valuestr: str, factor: int, info: int, measurementidx: int) -> float:
   try:
     # if (len(s) < 8):
-    #   raise ValueError('Not a valid value')
+    #   raise ValueLog.Error('Not a valid value')
 
     # factor = int(s[5:6].decode('ascii'))
     # valstr: str = s[0:5].decode('ascii')
@@ -262,51 +229,51 @@ def calcValue(valuestr: str, factor: int, info: int, measurementidx: int) -> flo
       value = -value
 
   except ValueError as e:
-    Warn(f'Value error: {e}')
+    Log.Warn(f'Value error: {e}')
     value = 99999999.9  # Error value
   except Exception as e:
-    Error(f'General error: {e}')
+    Log.Error(f'General error: {e}')
     value = 99999999.9  # Error value
   return value
 
 
 def decodeStr(b: bytes):
-    Debug(f'Data: {b}')
-    Debug(f'{b[0:5].decode()} {chr(b[6])} {chr(b[7])} {chr(b[8])}')
+    Log.Debug(f'Data: {b}')
+    Log.Debug(f'{b[0:5].decode()} {chr(b[6])} {chr(b[7])} {chr(b[8])}')
 
     # 0-4 Wertestring
     valuestr: str = f'{b[0:5].decode()}'
-    Debug(f'ValueStr: {valuestr}')
+    Log.Debug(f'ValueStr: {valuestr}')
 
     # 5 Bereich
     factor: int = int(chr(b[5]))
-    Debug(f'Factor: {factor}')
+    Log.Debug(f'Factor: {factor}')
 
     # 6 Schalter
     measurementindex = int(b[6] - 48)
     measurement: str = MEASUREMENT[measurementindex]
-    Debug(f'MEASUREMENT: {measurement}')
+    Log.Debug(f'MEASUREMENT: {measurement}')
 
     # 7 Kopplung
     cuppling: str = CUPPLING[b[7] - 48]
-    Debug(f'Cuppling: {cuppling}')
+    Log.Debug(f'Cuppling: {cuppling}')
 
     # 8 Info
     info: str = INFO[int(b[8] - 48)]
-    Debug(f'Info: {info}')
+    Log.Debug(f'Info: {info}')
 
     # Wert mit Faktor
     value: float = float(calcValue(valuestr, factor, info, measurementindex))
-    Debug(f'Value: {value}')
+    Log.Debug(f'Value: {value}')
 
-    Log(f'{cuppling}{measurement} {value} Faktor: {factor}, Info: {info}')
+    Log.Log(f'{cuppling}{measurement} {value} Faktor: {factor}, Info: {info}')
 
 
 # main program
 listAllHidDevices()
 device: hid.HidDevice = getFirstHidDevicesByVendorProduct(0x1a86, 0xe008)
 if (device is None):
-    Error("No device to open")
+    Log.Error("No device to open")
     exit(1)
 
 device.open()
@@ -314,7 +281,7 @@ device.set_raw_data_handler(readDataHandler)
 out_report = getOutReport(device)
 # in_report = getInReport(device)
 
-Debug(writeData(out_report, b'data?;'))
+Log.Debug(writeData(out_report, b'data?;'))
 
 # Turn on Serial communication
 feature_report = getFeatureReport(device)
@@ -322,24 +289,24 @@ feature_report = getFeatureReport(device)
 # baudrate C0 12 -> 0x12C0 = 4800
 # baudrate 80 25 -> 0x2580 = 9600
 # Not working????
-Debug(writeBuffer(feature_report, [0x00, 0x4b, 0x00, 0x00, 0x03, 0x00]))
+Log.Debug(writeBuffer(feature_report, [0x00, 0x4b, 0x00, 0x00, 0x03, 0x00]))
 
-Warn('Press Ctrl+C to terminate program')
+Log.Warn('Press Ctrl+C to terminate program')
 try:
-    Log("Device is open")
+    Log.Log("Device is open")
     while (device.is_plugged()):
       if(len(lastrecbytes) > 0):
         if (len(lastrecbytes) == 11):
           decodeStr(lastrecbytes)
         else:
-          Warn(f'Error: Stringlength is wrong: {len(lastrecbytes)})')
+          Log.Warn(f'Warning: Stringlength is wrong: {len(lastrecbytes)})')
         lastrecbytes = []
 except KeyboardInterrupt as e:
-    Warn("KeyboardInterrupt")
-    Warn(e)
+    Log.Warn("KeyboardInterrupt")
+    Log.Warn(e)
 finally:
-    Log("Finally")
+    Log.Log("Finally")
     device.close()
-    Log("Device is closed")
+    Log.Log("Device is closed")
 
 exit(0)
